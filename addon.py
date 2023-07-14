@@ -71,7 +71,7 @@ def get_playlist_url(episode):
     Get Playlist-URL from episode number
     Playlist-URL is in .m3u8 format (can be played by Kodi directly)
     """
-    pl = urlopen("https://api.gronkh.tv/v1/video/playlist?episode=" + episode)
+    pl = urlopen("https://api.gronkh.tv/v1/video/playlist?episode=" + str(episode))
     playlist_url = json.loads(pl.read().decode("utf-8"))["playlist_url"]
 
     return playlist_url
@@ -220,16 +220,18 @@ def list_videos(category, offset=0, search_str=""):
         list_item = xbmcgui.ListItem(label=video['title'])
         # Set additional info for the list item.
         # 'mediatype' is needed for skin to display info for this ListItem correctly.
+        ep = video['episode']
         list_item.setInfo('video', {'title': video['title'],
                                     'genre': 'Streams und Let\'s Plays',
                                     'mediatype': 'video',
                                     'duration': video['video_length'],
-                                    'episode': video['episode'],
+                                    'episode': ep,
                                     'date': video['created_at'][:10],
                                     'dateadded': video['created_at'],
                                     'aired': video['created_at'],
                                     'premiered': video['created_at']
                                     })
+        xbmc.log(video['created_at'], xbmc.LOGINFO)
         # Set graphics (thumbnail, fanart, banner, poster, landscape etc.) for the list item.
         # Here we use the same image for all items for simplicity's sake.
         # In a real-life plugin you need to set each image accordingly.
@@ -243,6 +245,21 @@ def list_videos(category, offset=0, search_str=""):
         # Add the list item to a virtual Kodi folder.
         # is_folder = False means that this item won't open any sub-list.
         is_folder = False
+
+        # Add context menu items for chapters
+        # https://alwinesch.github.io/group__python__xbmcgui__listitem.html#ga14712acc2994196012036f43eb2135c4
+        # PlayMedia(media[,isdir][,1],[playoffset=xx]) -> see https://alwinesch.github.io/page__list_of_built_in_functions.html
+        cm = []
+        # get chapters
+        req = urlopen(f'https://api.gronkh.tv/v1/video/info?episode={ep}')
+        content = req.read().decode("utf-8")
+        chapters = json.loads(content)["chapters"]
+        for c in chapters:
+            title = str(c.get("title"))
+            offset = int(c.get("offset"))
+            cm.append((f'jump to [{seconds_to_time(offset)}]: {title}', f'PlayMedia(media={url}, playeroffset={offset})'))
+        list_item.addContextMenuItems(cm)
+
         # Add our item to the Kodi virtual folder listing.
         xbmcplugin.addDirectoryItem(_HANDLE, url, list_item, is_folder)
     if category == _CATEGORIES[2] and len(videos) == 25 and videos[24]['episode'] != 1:
@@ -278,7 +295,7 @@ def list_videos(category, offset=0, search_str=""):
                 is_folder = True
                 # Add our item to the Kodi virtual folder listing.
                 xbmcplugin.addDirectoryItem(_HANDLE, url, list_item, is_folder)
-        xbmcplugin.addSortMethod(_HANDLE, xbmcplugin.SORT_METHOD_DATEADDED)
+            xbmcplugin.addSortMethod(_HANDLE, xbmcplugin.SORT_METHOD_DATEADDED)
     # Add a sort method for the virtual folder items (alphabetically, ignore articles)
     xbmcplugin.addSortMethod(_HANDLE, xbmcplugin.SORT_METHOD_NONE)
     # Finish creating a virtual folder.
@@ -333,6 +350,18 @@ def router(paramstring):
         # display the list of video categories
         list_categories()
 
+def seconds_to_time(s):
+    h = int(s / 60 / 60)
+    m = int((s / 60) % 60)
+    s = int(s % 60)
+##    ret = ""
+##    if h > 0:
+##        ret = f'{h}:{m:02d}:{s:02d}'
+##    elif m > 0:
+##        ret = f'{m}:{s:02d}'
+##    else:
+##        ret = f'{s}s'
+    return f'{h}:{m:02d}:{s:02d}'
 
 if __name__ == "__main__":
     #set up headers for https requests
